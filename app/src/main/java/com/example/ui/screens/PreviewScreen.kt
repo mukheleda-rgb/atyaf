@@ -46,11 +46,11 @@ fun PreviewScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val favorites by repository.observeFavorites().collectAsState(initial = emptyList())
-    val isFavorite = favorites.any { it.id == currentItem.id }
-    var isApplying by remember { mutableStateOf(false) }
     val safeItems = remember(items, item) { (items.ifEmpty { listOf(item) }).let { list -> if (list.any { it.id == item.id }) list else listOf(item) + list } }
     var currentIndex by remember(item.id, safeItems) { mutableIntStateOf(safeItems.indexOfFirst { it.id == item.id }.coerceAtLeast(0)) }
     val currentItem = safeItems[currentIndex.coerceIn(0, safeItems.lastIndex)]
+    val isFavorite = favorites.any { it.id == currentItem.id }
+    var isApplying by remember { mutableStateOf(false) }
     var dragDistance by remember { mutableFloatStateOf(0f) }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black).pointerInput(safeItems, currentIndex) {
