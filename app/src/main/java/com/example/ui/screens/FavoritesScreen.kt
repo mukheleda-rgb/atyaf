@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun FavoritesScreen(
     repository: WallpaperRepository,
-    onWallpaperClick: (WallpaperItem) -> Unit
+    onWallpaperClick: (WallpaperItem, List<WallpaperItem>) -> Unit
 ) {
     val favorites by repository.observeFavorites().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -84,7 +84,7 @@ fun FavoritesScreen(
                     WallpaperCard(
                         item = item,
                         isFavorite = true,
-                        onClick = { onWallpaperClick(item) },
+                        onClick = { onWallpaperClick(item, favorites) },
                         onFavoriteClick = {
                             scope.launch {
                                 repository.setFavorite(item, false).onFailure {
