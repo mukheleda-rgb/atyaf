@@ -25,7 +25,7 @@ class AutoWallpaperWorker(
             val bitmap = URL(imageUrl).openConnection().apply {
                 connectTimeout = 15_000
                 readTimeout = 25_000
-            }.getInputStream().use(BitmapFactory::decodeStream)
+            }.getInputStream().use { input -> BitmapFactory.decodeStream(input) }
                 ?: return@withContext Result.retry()
 
             WallpaperManager.getInstance(applicationContext).setBitmap(
