@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.google.firebase.Firebase
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
@@ -193,7 +192,23 @@ private fun performGoogleSignIn(
 ) {
     scope.launch {
         try {
-            val clientId = context.getString(R.string.default_web_client_id)
+            // google-services.json is intentionally not committed to the repository.
+            // Resolve the generated OAuth client ID at runtime so CI can compile without
+            // Firebase credentials, while clearly disabling Google sign-in until configured.
+            val clientIdResource = context.resources.getIdentifier(
+                "default_web_client_id",
+                "string",
+                context.packageName
+            )
+            if (clientIdResource == 0) {
+                onError("تسجيل الدخول عبر Google غير مهيأ بعد. أضف ملف google-services.json من مشروع Firebase ثم أعد البناء.")
+                return@launch
+            }
+            val clientId = context.getString(clientIdResource)
+            if (clientId.isBlank()) {
+                onError("معرّف OAuth غير موجود في إعدادات Firebase.")
+                return@launch
+            }
             val credentialManager = CredentialManager.create(context)
             val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
             val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
