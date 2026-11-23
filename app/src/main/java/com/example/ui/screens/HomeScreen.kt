@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     repository: WallpaperRepository,
-    onWallpaperClick: (WallpaperItem) -> Unit
+    onWallpaperClick: (WallpaperItem, List<WallpaperItem>) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -164,7 +164,7 @@ fun HomeScreen(
                     WallpaperCard(
                         item = item,
                         isFavorite = item.id in favoriteIds,
-                        onClick = { onWallpaperClick(item) },
+                        onClick = { onWallpaperClick(item, filteredWallpapers) },
                         onFavoriteClick = {
                             val shouldFavorite = item.id !in favoriteIds
                             scope.launch {
