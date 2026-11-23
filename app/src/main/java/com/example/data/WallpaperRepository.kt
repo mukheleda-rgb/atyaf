@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 
 class WallpaperRepository(private val db: FirebaseFirestore) {
 
@@ -36,6 +37,7 @@ class WallpaperRepository(private val db: FirebaseFirestore) {
     )
 
     private val auth = Firebase.auth
+    private val nextPhotoPage = AtomicInteger(1)
 
     /**
      * Returns photographs from the live Picsum Photos API.
@@ -46,7 +48,8 @@ class WallpaperRepository(private val db: FirebaseFirestore) {
     suspend fun fetchRealWallpapers(locationQuery: String = "الكل"): List<WallpaperItem> =
         withContext(Dispatchers.IO) {
             try {
-                PicsumApi.instance.getPhotos(page = 1, limit = 60)
+                val page = nextPhotoPage.getAndUpdate { current -> if (current >= 1000) 1 else current + 1 }
+                PicsumApi.instance.getPhotos(page = page, limit = 60)
                     .filter { it.id.isNotBlank() && it.downloadUrl.isNotBlank() }
                     .map { photo ->
                         WallpaperItem(
