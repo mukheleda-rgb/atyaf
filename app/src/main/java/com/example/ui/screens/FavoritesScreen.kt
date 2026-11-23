@@ -22,72 +22,79 @@ fun FavoritesScreen(
     repository: WallpaperRepository,
     onWallpaperClick: (WallpaperItem) -> Unit
 ) {
-    var favorites by remember { mutableStateOf<List<WallpaperItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val favorites by repository.observeFavorites().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        isLoading = true
-        val all = repository.fetchRealWallpapers("الكل")
-        favorites = all.take(4) // Sample favorites
-        isLoading = false
-    }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "المفضلة والخلفيات المحفوظة",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Column {
+                        Text(
+                            "المفضلة",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${favorites.size} خلفية محفوظة",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        if (isLoading) {
+        if (favorites.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (favorites.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Default.Favorite,
+                        Icons.Default.Favorite,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(Modifier.height(16.dp))
                     Text(
-                        text = "لا توجد خلفيات في المفضلة بعد",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                        "قائمتك فارغة",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "اضغط على رمز القلب في أي صورة لإضافتها هنا.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(minSize = 155.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize().padding(padding)
             ) {
-                items(favorites) { item ->
-                    WallpaperCard(item = item.copy(isFavorite = true), onClick = { onWallpaperClick(item) })
+                items(favorites, key = { it.id }) { item ->
+                    WallpaperCard(
+                        item = item,
+                        isFavorite = true,
+                        onClick = { onWallpaperClick(item) },
+                        onFavoriteClick = {
+                            scope.launch {
+                                repository.setFavorite(item, false).onFailure {
+                                    snackbarHostState.showSnackbar(
+                                        it.localizedMessage ?: "تعذر إزالة الصورة من المفضلة"
+                                    )
+                                }
+                            }
+                        }
+                    )
                 }
             }
         }
