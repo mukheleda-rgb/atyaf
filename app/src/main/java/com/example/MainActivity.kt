@@ -96,6 +96,7 @@ fun MainAppScreen(repository: WallpaperRepository, onSignOut: () -> Unit) {
     if (previewWallpaper != null) {
         PreviewScreen(
             item = previewWallpaper!!,
+            repository = repository,
             onBack = { previewWallpaper = null }
         )
     } else {
