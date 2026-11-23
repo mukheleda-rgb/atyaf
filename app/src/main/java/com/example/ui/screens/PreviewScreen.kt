@@ -4,6 +4,9 @@ import android.app.WallpaperManager
 import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,22 +39,38 @@ import kotlinx.coroutines.withContext
 @Composable
 fun PreviewScreen(
     item: WallpaperItem,
+    items: List<WallpaperItem>,
     repository: WallpaperRepository,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val favorites by repository.observeFavorites().collectAsState(initial = emptyList())
-    val isFavorite = favorites.any { it.id == item.id }
+    val isFavorite = favorites.any { it.id == currentItem.id }
     var isApplying by remember { mutableStateOf(false) }
+    val safeItems = remember(items, item) { (items.ifEmpty { listOf(item) }).let { list -> if (list.any { it.id == item.id }) list else listOf(item) + list } }
+    var currentIndex by remember(item.id, safeItems) { mutableIntStateOf(safeItems.indexOfFirst { it.id == item.id }.coerceAtLeast(0)) }
+    val currentItem = safeItems[currentIndex.coerceIn(0, safeItems.lastIndex)]
+    var dragDistance by remember { mutableFloatStateOf(0f) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black).pointerInput(safeItems, currentIndex) {
+        detectHorizontalDragGestures(
+            onHorizontalDrag = { _, amount -> dragDistance += amount },
+            onDragEnd = {
+                if (abs(dragDistance) > 55f) {
+                    currentIndex = (currentIndex + if (dragDistance < 0) 1 else -1).coerceIn(0, safeItems.lastIndex)
+                }
+                dragDistance = 0f
+            },
+            onDragCancel = { dragDistance = 0f }
+        )
+    }) {
         AsyncImage(
             model = ImageRequest.Builder(context)
-                .data(item.imageUrl.ifBlank { R.drawable.ic_launcher_background })
+                .data(currentItem.imageUrl.ifBlank { R.drawable.ic_launcher_background })
                 .crossfade(true)
                 .build(),
-            contentDescription = item.title,
+            contentDescription = currentItem.title,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
@@ -76,7 +95,7 @@ fun PreviewScreen(
                     IconButton(
                         onClick = {
                             scope.launch {
-                                repository.setFavorite(item, !isFavorite).onFailure {
+                                repository.setFavorite(currentItem, !isFavorite).onFailure {
                                     Toast.makeText(
                                         context,
                                         it.localizedMessage ?: "تعذر تحديث المفضلة",
@@ -101,7 +120,7 @@ fun PreviewScreen(
                                 type = "text/plain"
                                 putExtra(
                                     android.content.Intent.EXTRA_TEXT,
-                                    "شاهد هذه الخلفية من أطياف: ${item.imageUrl}"
+                                    "شاهد هذه الخلفية من أطياف: ${currentItem.imageUrl}"
                                 )
                             }
                             context.startActivity(android.content.Intent.createChooser(shareIntent, "مشاركة الخلفية"))
@@ -123,13 +142,13 @@ fun PreviewScreen(
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        item.title,
+                        currentItem.title,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "المصدر: ${item.sourcePlatform} • المصور: ${item.author}",
+                        "المصدر: ${currentItem.sourcePlatform} • المصور: ${currentItem.author}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFCBD5E1)
                     )
@@ -142,7 +161,7 @@ fun PreviewScreen(
                                 try {
                                     val loader = coil.ImageLoader(context)
                                     val request = ImageRequest.Builder(context)
-                                        .data(item.imageUrl)
+                                        .data(currentItem.imageUrl)
                                         .allowHardware(false)
                                         .build()
                                     val result = loader.execute(request)
