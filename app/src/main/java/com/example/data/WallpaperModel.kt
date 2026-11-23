@@ -12,14 +12,14 @@ data class WallpaperItem(
     val title: String = "",
     val category: String = "غير مصنف",
     val imageUrl: String = "",
-    val sourcePlatform: String = "غير محدد"
+    val sourcePlatform: String = "غير محدد",
     val author: String = "غير معروف",
     val isFavorite: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null
 )
 
 data class AutoChangeSettings(
-    val intervalHours: Int = 3, // 1, 3, 6, 12, 24
+    val intervalHours: Int = 3,
     val enabled: Boolean = false,
     val wifiOnly: Boolean = true,
     val category: String = "الكل"
