@@ -28,17 +28,25 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools
+          packages: platform-tools, build-tools;36.0.0
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      - name: Create temporary debug signing key
+      # Keep one debug certificate between CI runs so a later debug APK can
+      # update an earlier installation instead of failing with a signature mismatch.
+      - name: Restore stable debug signing key
+        uses: actions/cache@v4
+        with:
+          path: debug.keystore
+          key: atyaf-debug-signing-v1-${{ runner.os }}
+
+      - name: Create debug signing key if needed
         run: |
           if [ ! -f debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore -storepass android \
+            keytool -genkeypair -noprompt -v -keystore debug.keystore -storepass android \
               -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
               -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
@@ -46,7 +54,28 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Verify APK signature and 16 KB alignment
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+
+      - name: Install APK on Android 16 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: |
+            adb install --no-streaming app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm path com.aistudio.atyaf.mrxqkp
+
+      - name: Upload verified debug APK
         uses: actions/upload-artifact@v4
         with:
           name: atyaf-debug-apk
