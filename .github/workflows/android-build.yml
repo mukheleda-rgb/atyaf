@@ -70,7 +70,8 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-boot-timeout: 600
+          emulator-boot-timeout: 900
+          env: ANDROID_I_WANT_MY_TCG=yes
           script: |
             adb install --no-streaming app/build/outputs/apk/debug/app-debug.apk
             adb shell pm path com.aistudio.atyaf.mrxqkp
