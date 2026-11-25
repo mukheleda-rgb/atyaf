@@ -38,11 +38,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         configureAppCheck(this, intent)
+        val firebaseReady = FirebaseApp.getApps(this).isNotEmpty()
         val wallpaperRepository = WallpaperRepository(this)
         setContent {
             MyApplicationTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppRoot(wallpaperRepository)
+                    AppRoot(wallpaperRepository, firebaseReady)
                 }
             }
         }
@@ -50,7 +51,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppRoot(repository: WallpaperRepository) {
+fun AppRoot(repository: WallpaperRepository, firebaseReady: Boolean) {
+    if (!firebaseReady) {
+        // Firebase credentials are optional: allow browsing and local features as a guest.
+        MainAppScreen(repository = repository, onSignOut = {})
+        return
+    }
     val auth = Firebase.auth
     var currentUser by remember { mutableStateOf(auth.currentUser) }
     DisposableEffect(Unit) {
