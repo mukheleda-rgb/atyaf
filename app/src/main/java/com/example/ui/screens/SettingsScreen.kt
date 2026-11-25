@@ -17,9 +17,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.workers.AutoWallpaperScheduler
-import com.google.firebase.Firebase
-import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.auth
 
 private data class IntervalOption(val minutes: Long, val label: String)
 
@@ -30,8 +27,6 @@ fun SettingsScreen(onSignOut: () -> Unit) {
     val preferences = remember {
         context.getSharedPreferences("atyaf_preferences", Context.MODE_PRIVATE)
     }
-    val firebaseReady = remember { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }
-    val currentUser = remember(firebaseReady) { if (firebaseReady) runCatching { Firebase.auth.currentUser }.getOrNull() else null }
 
     var autoEnabled by remember { mutableStateOf(preferences.getBoolean("auto_wallpaper_enabled", false)) }
     var wifiOnly by remember { mutableStateOf(preferences.getBoolean("wifi_only", true)) }
@@ -81,31 +76,6 @@ fun SettingsScreen(onSignOut: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("حسابك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        currentUser?.email ?: "لا يوجد حساب مسجل",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            if (firebaseReady) runCatching { Firebase.auth.signOut() }
-                            onSignOut()
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("تسجيل الخروج")
-                    }
-                }
-            }
-
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surfaceVariant,
