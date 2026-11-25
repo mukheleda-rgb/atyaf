@@ -63,6 +63,13 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
 
+      - name: Upload verified debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: atyaf-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
       - name: Install APK on Android 16 emulator (best-effort)
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
@@ -76,10 +83,3 @@ jobs:
           script: |
             adb install --no-streaming app/build/outputs/apk/debug/app-debug.apk
             adb shell pm path com.aistudio.atyaf.mrxqkp
-
-      - name: Upload verified debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: atyaf-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
