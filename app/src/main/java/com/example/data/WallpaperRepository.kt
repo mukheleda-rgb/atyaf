@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.Log
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.AspectRatio
 import com.google.firebase.ai.type.ImageConfig
@@ -30,13 +32,18 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
-class WallpaperRepository(private val db: FirebaseFirestore) {
+class WallpaperRepository(private val db: FirebaseFirestore?, private val auth: FirebaseAuth?) {
 
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(context.applicationContext.getString(com.example.R.string.firestore_database_id))
+        db = if (FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+            runCatching {
+                FirebaseFirestore.getInstance(context.applicationContext.getString(com.example.R.string.firestore_database_id))
+            }.getOrNull()
+        } else null,
+        auth = if (FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+            runCatching { Firebase.auth }.getOrNull()
+        } else null
     )
-
-    private val auth = Firebase.auth
     private val nextPhotoPage = AtomicInteger(1)
 
     /**
@@ -69,14 +76,15 @@ class WallpaperRepository(private val db: FirebaseFirestore) {
 
     /** Live Firestore stream of the signed-in user's saved favorites. */
     fun observeFavorites(): Flow<List<WallpaperItem>> = flow {
-        val uid = auth.currentUser?.uid
-        if (uid == null) {
+        val uid = auth?.currentUser?.uid
+        val database = db
+        if (uid == null || database == null) {
             emit(emptyList())
             return@flow
         }
 
         emitAll(
-            db.collection("users").document(uid).collection("favorites")
+            database.collection("users").document(uid).collection("favorites")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.documents.mapNotNull { document ->
@@ -95,10 +103,11 @@ class WallpaperRepository(private val db: FirebaseFirestore) {
     /** Adds or removes a favorite in the current user's own Firestore collection. */
     suspend fun setFavorite(item: WallpaperItem, favorite: Boolean): Result<Unit> {
         return try {
-            val uid = auth.currentUser?.uid ?: error("يجب تسجيل الدخول أولاً")
+            val uid = auth?.currentUser?.uid ?: error("يجب تسجيل الدخول أولاً")
+            val database = db ?: error("المزامنة السحابية غير مهيأة في وضع الزائر")
             require(item.id.isNotBlank()) { "معرّف الخلفية غير صالح" }
 
-            val document = db.collection("users").document(uid)
+            val document = database.collection("users").document(uid)
                 .collection("favorites").document(item.id)
 
             if (favorite) {
@@ -170,10 +179,11 @@ class WallpaperRepository(private val db: FirebaseFirestore) {
     // Cloud storage for wallpapers explicitly saved by the user.
     suspend fun saveWallpaperToCloud(item: WallpaperItem): Result<Unit> {
         return try {
-            val uid = auth.currentUser?.uid ?: error("يجب تسجيل الدخول أولاً")
-            val docRef = db.collection("users").document(uid)
+            val uid = auth?.currentUser?.uid ?: error("يجب تسجيل الدخول أولاً")
+            val database = db ?: error("المزامنة السحابية غير مهيأة في وضع الزائر")
+            val docRef = database.collection("users").document(uid)
                 .collection("wallpapers")
-                .document(item.id.ifBlank { db.collection("_ids").document().id })
+                .document(item.id.ifBlank { database.collection("_ids").document().id })
 
             val payload = mapOf(
                 "userId" to uid,
