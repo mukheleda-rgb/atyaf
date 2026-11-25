@@ -49,7 +49,7 @@ fun BlendScreen(repository: WallpaperRepository, wallpapers: List<WallpaperItem>
             TopAppBar(
                 title = {
                     Text(
-                        text = "دمج خلفيات موقعين أو أكثر",
+                        text = "دمج خلفيتين",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 }
@@ -75,7 +75,7 @@ fun BlendScreen(repository: WallpaperRepository, wallpapers: List<WallpaperItem>
                     Icon(imageVector = Icons.Default.Layers, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "اختر خلفيتين لدمجهما معاً بطريقة فنية احترافية",
+                        text = "اختر صورتين من المعرض، ثم امزجهما واحفظ النتيجة كخلفية.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -142,6 +142,60 @@ fun BlendScreen(repository: WallpaperRepository, wallpapers: List<WallpaperItem>
                             style = MaterialTheme.typography.labelSmall,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                "اختر الصور من المعرض",
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (wallpapers.isEmpty()) {
+                Text(
+                    "لا توجد صور متاحة. افتح الصفحة الرئيسية وحمّل الصور أولاً.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(wallpapers, key = { it.id }) { photo ->
+                        Card(
+                            modifier = Modifier.width(118.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column {
+                                AsyncImage(
+                                    model = photo.imageUrl,
+                                    contentDescription = photo.title,
+                                    modifier = Modifier.fillMaxWidth().height(104.dp),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                                Text(
+                                    photo.title,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    TextButton(onClick = { selectedItem1 = photo }) {
+                                        Text(if (selectedItem1?.id == photo.id) "الأولى ✓" else "الأولى")
+                                    }
+                                    TextButton(onClick = { selectedItem2 = photo }) {
+                                        Text(if (selectedItem2?.id == photo.id) "الثانية ✓" else "الثانية")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
