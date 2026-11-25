@@ -82,7 +82,7 @@ class WallpaperRepository(private val db: FirebaseFirestore?, private val auth: 
     suspend fun fetchRealWallpapers(locationQuery: String = "الكل"): List<WallpaperItem> =
         withContext(Dispatchers.IO) {
             val prefs = appContext.getSharedPreferences("atyaf_preferences", Context.MODE_PRIVATE)
-            val allSources = listOf("openverse", "wikimedia", "picsum", "nasa", "met", "artic", "cleveland", "loc", "custom")
+            val allSources = listOf("openverse", "wikimedia", "picsum", "nasa", "met", "artic", "cleveland", "loc", "custom", "unsplash", "pexels", "pixabay", "flickr")
             val selectedSources = prefs.getStringSet("selected_image_sources", allSources.toSet())?.toSet() ?: allSources.toSet()
             val allCategories = linkedMapOf(
                 "الكل" to "",
@@ -198,8 +198,9 @@ class WallpaperRepository(private val db: FirebaseFirestore?, private val auth: 
                         add(item.optString("id"), item.optString("title"), category, image, "Library of Congress", item.optString("contributor"))
                     }
                 }
-                if ("custom" in selectedSources && customServer.isNotBlank()) runCatching {
-                    val rows = json("$customServer/search?q=${encoded(query)}&limit=30").optJSONArray("results") ?: JSONArray()
+                if (("custom" in selectedSources || selectedSources.any { it in setOf("unsplash", "pexels", "pixabay", "flickr") }) && customServer.isNotBlank()) runCatching {
+                    val requestedSources = selectedSources.joinToString(",")
+                    val rows = json("$customServer/search?q=${encoded(query)}&limit=30&sources=${encoded(requestedSources)}").optJSONArray("results") ?: JSONArray()
                     for (i in 0 until rows.length()) {
                         val item = rows.optJSONObject(i) ?: continue
                         add(item.optString("id"), item.optString("title"), item.optString("category").ifBlank { category }, item.optString("imageUrl"), item.optString("sourcePlatform").ifBlank { "الخادم المخصص" }, item.optString("author"))
