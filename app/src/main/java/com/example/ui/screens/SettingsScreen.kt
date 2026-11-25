@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.workers.AutoWallpaperScheduler
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.auth
 
 private data class IntervalOption(val minutes: Long, val label: String)
@@ -29,7 +30,8 @@ fun SettingsScreen(onSignOut: () -> Unit) {
     val preferences = remember {
         context.getSharedPreferences("atyaf_preferences", Context.MODE_PRIVATE)
     }
-    val currentUser = Firebase.auth.currentUser
+    val firebaseReady = remember { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }
+    val currentUser = remember(firebaseReady) { if (firebaseReady) runCatching { Firebase.auth.currentUser }.getOrNull() else null }
 
     var autoEnabled by remember { mutableStateOf(preferences.getBoolean("auto_wallpaper_enabled", false)) }
     var wifiOnly by remember { mutableStateOf(preferences.getBoolean("wifi_only", true)) }
@@ -94,7 +96,7 @@ fun SettingsScreen(onSignOut: () -> Unit) {
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = {
-                            Firebase.auth.signOut()
+                            if (firebaseReady) runCatching { Firebase.auth.signOut() }
                             onSignOut()
                         },
                         shape = RoundedCornerShape(12.dp)
