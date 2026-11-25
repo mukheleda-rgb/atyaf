@@ -76,31 +76,137 @@ class WallpaperRepository(private val db: FirebaseFirestore?, private val auth: 
     private val nextPhotoPage = AtomicInteger(1)
 
     /**
-     * Returns photographs from the live Picsum Photos API.
-     * Picsum does not provide reliable subject or city metadata, so we never
-     * invent categories, authors, or geographic matches for its photographs.
+     * Loads from the locally selected public image providers. Source selection,
+     * category selection and custom server URL are stored on this device only.
      */
-    @Suppress("UNUSED_PARAMETER")
     suspend fun fetchRealWallpapers(locationQuery: String = "الكل"): List<WallpaperItem> =
         withContext(Dispatchers.IO) {
-            try {
-                val page = nextPhotoPage.getAndUpdate { current -> if (current >= 1000) 1 else current + 1 }
-                PicsumApi.instance.getPhotos(page = page, limit = 60)
-                    .filter { it.id.isNotBlank() && it.downloadUrl.isNotBlank() }
-                    .map { photo ->
-                        WallpaperItem(
-                            id = "picsum_${photo.id}",
-                            title = "صورة فوتوغرافية #${photo.id}",
-                            category = "تصوير فوتوغرافي",
-                            imageUrl = "https://picsum.photos/id/${photo.id}/1080/1920",
-                            sourcePlatform = "Picsum Photos",
-                            author = photo.author.ifBlank { "مصور غير معروف" }
-                        )
-                    }
-            } catch (e: Exception) {
-                Log.e("WallpaperRepo", "Unable to load photographs from Picsum Photos", e)
-                emptyList()
+            val prefs = appContext.getSharedPreferences("atyaf_preferences", Context.MODE_PRIVATE)
+            val allSources = listOf("openverse", "wikimedia", "picsum", "nasa", "met", "artic", "cleveland", "loc", "custom")
+            val selectedSources = prefs.getStringSet("selected_image_sources", allSources.toSet())?.toSet() ?: allSources.toSet()
+            val allCategories = linkedMapOf(
+                "الكل" to "",
+                "طبيعة" to "nature landscape",
+                "فضاء" to "space galaxy nebula",
+                "عمارة" to "architecture buildings",
+                "حيوانات" to "wildlife animals",
+                "فن" to "art illustration",
+                "بحر" to "ocean sea underwater",
+                "سيارات" to "cars automotive",
+                "تقنية" to "technology"
+            )
+            val selectedCategories = prefs.getStringSet("selected_image_categories", setOf("الكل"))?.toSet()
+                ?.filter { it in allCategories }?.ifEmpty { listOf("الكل") } ?: listOf("الكل")
+            val customServer = prefs.getString("custom_image_server", "")?.trim().orEmpty().trimEnd('/')
+            val queries = if ("الكل" in selectedCategories) listOf("الكل" to "") else selectedCategories.map { it to allCategories.getValue(it) }
+            val output = mutableListOf<WallpaperItem>()
+
+            fun encoded(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+            fun json(url: String): JSONObject {
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                connection.setRequestProperty("User-Agent", "AtyafAndroid/1.0 (wallpaper browser)")
+                return try {
+                    if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
+                    JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                } finally { connection.disconnect() }
             }
+            fun add(id: String, title: String, category: String, image: String, source: String, author: String) {
+                if (id.isNotBlank() && image.startsWith("https://")) {
+                    output.add(WallpaperItem(
+                        id = "${source.lowercase().replace(" ", "_")}_${id}",
+                        title = title.ifBlank { "صورة من $source" },
+                        category = category.ifBlank { "غير مصنف" },
+                        imageUrl = image,
+                        sourcePlatform = source,
+                        author = author.ifBlank { "غير معروف" }
+                    ))
+                }
+            }
+
+            for ((category, categoryQuery) in queries) {
+                val query = listOf(locationQuery.takeIf { it != "الكل" }.orEmpty(), categoryQuery).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "wallpaper photography" }
+                if ("picsum" in selectedSources && category == "الكل") runCatching {
+                    val page = nextPhotoPage.getAndUpdate { if (it >= 1000) 1 else it + 1 }
+                    PicsumApi.instance.getPhotos(page = page, limit = 40).forEach {
+                        add(it.id, "صورة فوتوغرافية #${it.id}", "تصوير فوتوغرافي", "https://picsum.photos/id/${it.id}/1080/1920", "Picsum Photos", it.author)
+                    }
+                }
+                if ("openverse" in selectedSources) runCatching {
+                    val data = json("https://api.openverse.org/v1/images/?q=${encoded(query)}&page_size=30")
+                    val results = data.optJSONArray("results") ?: JSONArray()
+                    for (i in 0 until results.length()) {
+                        val item = results.optJSONObject(i) ?: continue
+                        add(item.optString("id"), item.optString("title"), category, item.optString("thumbnail").ifBlank { item.optString("url") }, "Openverse", item.optString("creator"))
+                    }
+                }
+                if ("wikimedia" in selectedSources) runCatching {
+                    val url = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encoded(query)}&gsrnamespace=6&gsrlimit=30&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1000&format=json&origin=*"
+                    val pages = json(url).optJSONObject("query")?.optJSONObject("pages") ?: JSONObject()
+                    val keys = pages.keys()
+                    while (keys.hasNext()) {
+                        val item = pages.optJSONObject(keys.next()) ?: continue
+                        val info = item.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
+                        val meta = info.optJSONObject("extmetadata")
+                        add(item.optString("pageid"), item.optString("title").removePrefix("File:"), category, info.optString("thumburl").ifBlank { info.optString("url") }, "Wikimedia Commons", meta?.optJSONObject("Artist")?.optString("value").orEmpty())
+                    }
+                }
+                if ("artic" in selectedSources) runCatching {
+                    val url = "https://api.artic.edu/api/v1/artworks/search?q=${encoded(query)}&limit=30&fields=id,title,artist_title,image_id,is_public_domain"
+                    val rows = json(url).optJSONArray("data") ?: JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val item = rows.optJSONObject(i) ?: continue
+                        val imageId = item.optString("image_id")
+                        if (imageId.isNotBlank() && item.optBoolean("is_public_domain")) add(item.optString("id"), item.optString("title"), category, "https://www.artic.edu/iiif/2/$imageId/full/843,/0/default.jpg", "Art Institute of Chicago", item.optString("artist_title"))
+                    }
+                }
+                if ("cleveland" in selectedSources) runCatching {
+                    val rows = json("https://openaccess-api.clevelandart.org/api/artworks/?q=${encoded(query)}&cc0=1&limit=30").optJSONArray("data") ?: JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val item = rows.optJSONObject(i) ?: continue
+                        val images = item.optJSONObject("images")
+                        val image = images?.optJSONObject("web")?.optString("url").orEmpty().ifBlank { images?.optJSONObject("print")?.optString("url").orEmpty() }
+                        add(item.optString("id"), item.optString("title"), category, image, "Cleveland Museum of Art", item.optString("creators"))
+                    }
+                }
+                if ("met" in selectedSources) runCatching {
+                    val ids = json("https://collectionapi.metmuseum.org/public/collection/v1.1/search?q=${encoded(query)}&hasImages=true&isPublicDomain=true")
+                        .optJSONArray("objectIDs") ?: JSONArray()
+                    for (i in 0 until minOf(ids.length(), 12)) {
+                        val id = ids.optInt(i)
+                        val item = json("https://collectionapi.metmuseum.org/public/collection/v1/objects/$id")
+                        if (item.optBoolean("isPublicDomain")) add(id.toString(), item.optString("title"), category, item.optString("primaryImageSmall").ifBlank { item.optString("primaryImage") }, "The Met Museum", item.optString("artistDisplayName"))
+                    }
+                }
+                if ("nasa" in selectedSources) runCatching {
+                    val rows = json("https://images-api.nasa.gov/search?q=${encoded(query)}&media_type=image&page_size=30")
+                        .optJSONObject("collection")?.optJSONArray("items") ?: JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val item = rows.optJSONObject(i) ?: continue
+                        val data = item.optJSONArray("data")?.optJSONObject(0) ?: continue
+                        val links = item.optJSONArray("links")
+                        val image = links?.optJSONObject(0)?.optString("href").orEmpty()
+                        add(data.optString("nasa_id"), data.optString("title"), category, image, "NASA", data.optString("photographer").ifBlank { data.optString("center") })
+                    }
+                }
+                if ("loc" in selectedSources) runCatching {
+                    val rows = json("https://www.loc.gov/photos/?fo=json&q=${encoded(query)}&c=30").optJSONArray("results") ?: JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val item = rows.optJSONObject(i) ?: continue
+                        val image = item.optJSONArray("image_url")?.optString(0).orEmpty()
+                        add(item.optString("id"), item.optString("title"), category, image, "Library of Congress", item.optString("contributor"))
+                    }
+                }
+                if ("custom" in selectedSources && customServer.isNotBlank()) runCatching {
+                    val rows = json("$customServer/search?q=${encoded(query)}&limit=30").optJSONArray("results") ?: JSONArray()
+                    for (i in 0 until rows.length()) {
+                        val item = rows.optJSONObject(i) ?: continue
+                        add(item.optString("id"), item.optString("title"), item.optString("category").ifBlank { category }, item.optString("imageUrl"), item.optString("sourcePlatform").ifBlank { "الخادم المخصص" }, item.optString("author"))
+                    }
+                }
+            }
+            output.distinctBy { it.id }.shuffled().take(180)
         }
 
     /** Favorites are stored only on this device; no account or cloud sync is used. */
