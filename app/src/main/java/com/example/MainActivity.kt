@@ -29,21 +29,17 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.auth
-import com.google.firebase.Firebase
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         configureAppCheck(this, intent)
-        val firebaseReady = FirebaseApp.getApps(this).isNotEmpty()
         val wallpaperRepository = WallpaperRepository(this)
         setContent {
             MyApplicationTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppRoot(wallpaperRepository, firebaseReady)
+                    AppRoot(wallpaperRepository)
                 }
             }
         }
@@ -51,21 +47,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppRoot(repository: WallpaperRepository, firebaseReady: Boolean) {
-    if (!firebaseReady) {
-        // Firebase credentials are optional: allow browsing and local features as a guest.
-        MainAppScreen(repository = repository, onSignOut = {})
-        return
-    }
-    val auth = Firebase.auth
-    var currentUser by remember { mutableStateOf(auth.currentUser) }
-    DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { currentUser = it.currentUser }
-        auth.addAuthStateListener(listener)
-        onDispose { auth.removeAuthStateListener(listener) }
-    }
-    if (currentUser == null) AuthScreen(onAuthSuccess = { currentUser = auth.currentUser })
-    else MainAppScreen(repository = repository, onSignOut = { currentUser = null })
+fun AppRoot(repository: WallpaperRepository) {
+    // Guest-first mode: never block the app behind the sign-in screen.
+    // Authentication can be added later as an optional feature.
+    MainAppScreen(repository = repository, onSignOut = {})
 }
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
