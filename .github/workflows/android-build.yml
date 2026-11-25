@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/real-wallpaper-sources-and-favorites
+      - feature/multi-image-sources-settings
   pull_request:
     branches:
       - main
