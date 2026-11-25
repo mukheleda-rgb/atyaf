@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
 import android.app.WallpaperManager
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -14,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.*
@@ -111,6 +116,48 @@ fun PreviewScreen(
                             contentDescription = "المفضلة",
                             tint = if (isFavorite) Color(0xFFFF5577) else Color.White
                         )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                var savedUri: android.net.Uri? = null
+                                try {
+                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                        throw IllegalStateException("حفظ الصور في المعرض يتطلب Android 10 أو أحدث")
+                                    }
+                                    withContext(Dispatchers.IO) {
+                                        val values = ContentValues().apply {
+                                            put(MediaStore.Images.Media.DISPLAY_NAME, "Atyaf_${System.currentTimeMillis()}.jpg")
+                                            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                                            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Atyaf")
+                                            put(MediaStore.Images.Media.IS_PENDING, 1)
+                                        }
+                                        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                                            ?: throw IllegalStateException("تعذر إنشاء ملف الصورة")
+                                        savedUri = uri
+                                        val connection = java.net.URL(currentItem.imageUrl).openConnection().apply {
+                                            connectTimeout = 15000
+                                            readTimeout = 30000
+                                        }
+                                        connection.getInputStream().use { input ->
+                                            context.contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output) }
+                                                ?: throw IllegalStateException("تعذر حفظ بيانات الصورة")
+                                        }
+                                        context.contentResolver.update(uri, ContentValues().apply {
+                                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                                        }, null, null)
+                                    }
+                                    Toast.makeText(context, "تم حفظ الصورة في Pictures/Atyaf", Toast.LENGTH_LONG).show()
+                                } catch (error: Exception) {
+                                    savedUri?.let { context.contentResolver.delete(it, null, null) }
+                                    Toast.makeText(context, "تعذر تنزيل الصورة: ${error.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = "تنزيل الصورة إلى الهاتف", tint = Color.White)
                     }
 
                     IconButton(
