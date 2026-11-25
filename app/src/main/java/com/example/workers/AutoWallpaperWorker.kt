@@ -5,7 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.data.PicsumApi
+import com.example.data.WallpaperRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL
@@ -17,14 +17,11 @@ class AutoWallpaperWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val page = ((System.currentTimeMillis() / 60_000L) % 1000L + 1L).toInt()
-            val photo = PicsumApi.instance.getPhotos(page = page, limit = 30).randomOrNull()
+            val wallpaper = WallpaperRepository(applicationContext).fetchRealWallpapers().randomOrNull()
                 ?: return@withContext Result.retry()
-
-            val imageUrl = "https://picsum.photos/id/${photo.id}/1080/1920"
-            val bitmap = URL(imageUrl).openConnection().apply {
-                connectTimeout = 15_000
-                readTimeout = 25_000
+            val bitmap = URL(wallpaper.imageUrl).openConnection().apply {
+                connectTimeout = 15000
+                readTimeout = 25000
             }.getInputStream().use { input -> BitmapFactory.decodeStream(input) }
                 ?: return@withContext Result.retry()
 
