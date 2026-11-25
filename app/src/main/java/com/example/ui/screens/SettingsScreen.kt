@@ -37,7 +37,11 @@ fun SettingsScreen(onSignOut: () -> Unit = {}) {
         ImageSourceOption("artic", "Art Institute of Chicago", "مجموعة فنية مفتوحة"),
         ImageSourceOption("cleveland", "Cleveland Museum of Art", "أعمال CC0 مفتوحة"),
         ImageSourceOption("loc", "Library of Congress", "صور تاريخية ووثائق"),
-        ImageSourceOption("custom", "خادم صور مخصص", "واجهة موحدة لمصادر إضافية")
+        ImageSourceOption("custom", "خادم صور مخصص", "واجهة موحدة لمصادر إضافية"),
+        ImageSourceOption("unsplash", "Unsplash", "خدمة مجانية بحدود استخدام؛ تحتاج مفتاحاً عبر الخادم"),
+        ImageSourceOption("pexels", "Pexels", "خدمة مجانية بحدود استخدام؛ تحتاج مفتاحاً عبر الخادم"),
+        ImageSourceOption("pixabay", "Pixabay", "خدمة مجانية بحدود استخدام؛ تحتاج مفتاحاً عبر الخادم"),
+        ImageSourceOption("flickr", "Flickr", "واجهة API ومفتاح مجاني وفق شروط المنصة؛ عبر الخادم")
     )
     val categories = listOf("الكل", "طبيعة", "فضاء", "عمارة", "حيوانات", "فن", "بحر", "سيارات", "تقنية")
     var selectedSources by remember {
@@ -121,7 +125,7 @@ fun SettingsScreen(onSignOut: () -> Unit = {}) {
                     Button(onClick = { saveImagePreferences(true) }, modifier = Modifier.fillMaxWidth()) {
                         Text("حفظ مصادر الصور")
                     }
-                    Text("يمكن إضافة خدمات مثل Unsplash وPexels وPixabay عبر خادم وسيط يضيف مفاتيح API بأمان؛ لا تضع المفاتيح السرية داخل التطبيق.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("تعمل المنصات التي تتطلب مفتاح API (Unsplash وPexels وPixabay وFlickr) عبر الخادم المخصص فقط. يجب أن يدعم الخادم معامل sources ويعيد النتائج في results؛ لا تضع المفاتيح السرية داخل التطبيق.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
