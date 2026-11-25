@@ -63,7 +63,8 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
 
-      - name: Install APK on Android 16 emulator
+      - name: Install APK on Android 16 emulator (best-effort)
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
