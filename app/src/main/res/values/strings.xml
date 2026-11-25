@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">11</string>
+    <string name="app_name">أطياف</string>
+    <string name="firestore_database_id">(default)</string>
 </resources>
