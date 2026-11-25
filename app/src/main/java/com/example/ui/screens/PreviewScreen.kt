@@ -4,6 +4,9 @@ import android.app.WallpaperManager
 import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.R
 import com.example.data.WallpaperItem
+import com.example.data.WallpaperRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,33 +39,46 @@ import kotlinx.coroutines.withContext
 @Composable
 fun PreviewScreen(
     item: WallpaperItem,
+    items: List<WallpaperItem>,
+    repository: WallpaperRepository,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var isFavorite by remember { mutableStateOf(item.isFavorite) }
+    val favorites by repository.observeFavorites().collectAsState(initial = emptyList())
+    val safeItems = remember(items, item) { (items.ifEmpty { listOf(item) }).let { list -> if (list.any { it.id == item.id }) list else listOf(item) + list } }
+    var currentIndex by remember(item.id, safeItems) { mutableIntStateOf(safeItems.indexOfFirst { it.id == item.id }.coerceAtLeast(0)) }
+    val currentItem = safeItems[currentIndex.coerceIn(0, safeItems.lastIndex)]
+    val isFavorite = favorites.any { it.id == currentItem.id }
     var isApplying by remember { mutableStateOf(false) }
+    var dragDistance by remember { mutableFloatStateOf(0f) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Wallpaper Image Background
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black).pointerInput(safeItems, currentIndex) {
+        detectHorizontalDragGestures(
+            onHorizontalDrag = { _, amount -> dragDistance += amount },
+            onDragEnd = {
+                if (abs(dragDistance) > 55f) {
+                    currentIndex = (currentIndex + if (dragDistance < 0) 1 else -1).coerceIn(0, safeItems.lastIndex)
+                }
+                dragDistance = 0f
+            },
+            onDragCancel = { dragDistance = 0f }
+        )
+    }) {
         AsyncImage(
             model = ImageRequest.Builder(context)
-                .data(item.imageUrl.ifBlank { R.drawable.ic_launcher_background })
+                .data(currentItem.imageUrl.ifBlank { R.drawable.ic_launcher_background })
                 .crossfade(true)
                 .build(),
-            contentDescription = item.title,
+            contentDescription = currentItem.title,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
 
-        // Gradient overlay / top & bottom controls
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -69,30 +86,30 @@ fun PreviewScreen(
             ) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.5f))
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "رجوع",
-                        tint = Color.White
-                    )
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = Color.White)
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     IconButton(
-                        onClick = { isFavorite = !isFavorite },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                        onClick = {
+                            scope.launch {
+                                repository.setFavorite(currentItem, !isFavorite).onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        it.localizedMessage ?: "تعذر تحديث المفضلة",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
                         Icon(
                             imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "المفضلة",
-                            tint = if (isFavorite) Color.Red else Color.White
+                            tint = if (isFavorite) Color(0xFFFF5577) else Color.White
                         )
                     }
 
@@ -101,28 +118,23 @@ fun PreviewScreen(
                             val shareIntent = android.content.Intent().apply {
                                 action = android.content.Intent.ACTION_SEND
                                 type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, "شاهد هذه الخلفية الرائعة من أطياف: ${item.imageUrl}")
+                                putExtra(
+                                    android.content.Intent.EXTRA_TEXT,
+                                    "شاهد هذه الخلفية من أطياف: ${currentItem.imageUrl}"
+                                )
                             }
                             context.startActivity(android.content.Intent.createChooser(shareIntent, "مشاركة الخلفية"))
                         },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "مشاركة",
-                            tint = Color.White
-                        )
+                        Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = Color.White)
                     }
                 }
             }
 
-            // Bottom action panel
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.Black.copy(alpha = 0.65f),
+                color = Color.Black.copy(alpha = 0.72f),
                 shape = RoundedCornerShape(28.dp)
             ) {
                 Column(
@@ -130,71 +142,72 @@ fun PreviewScreen(
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = item.title,
+                        currentItem.title,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "المنصة: ${item.sourcePlatform} • بواسطة ${item.author}",
+                        "المصدر: ${currentItem.sourcePlatform} • المصور: ${currentItem.author}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF94A3B8)
+                        color = Color(0xFFCBD5E1)
                     )
+                    Spacer(Modifier.height(20.dp))
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                isApplying = true
+                                try {
+                                    val loader = coil.ImageLoader(context)
+                                    val request = ImageRequest.Builder(context)
+                                        .data(currentItem.imageUrl)
+                                        .allowHardware(false)
+                                        .build()
+                                    val result = loader.execute(request)
+                                    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    isApplying = true
-                                    try {
-                                        val loader = coil.ImageLoader(context)
-                                        val req = ImageRequest.Builder(context)
-                                            .data(item.imageUrl)
-                                            .allowHardware(false)
-                                            .build()
-                                        val result = loader.execute(req)
-                                        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-
-                                        if (bitmap != null) {
-                                            withContext(Dispatchers.IO) {
-                                                val wallpaperManager = WallpaperManager.getInstance(context)
-                                                wallpaperManager.setBitmap(
-                                                    bitmap,
-                                                    null,
-                                                    true,
-                                                    WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                                                )
-                                            }
-                                            Toast.makeText(context, "تم تعيين الخلفية بنجاح للشاشة الرئيسية وقفل الشاشة!", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            Toast.makeText(context, "تعذر تحميل صورة الخلفية.", Toast.LENGTH_SHORT).show()
+                                    if (bitmap != null) {
+                                        withContext(Dispatchers.IO) {
+                                            WallpaperManager.getInstance(context).setBitmap(
+                                                bitmap,
+                                                null,
+                                                true,
+                                                WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                                            )
                                         }
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "فشل تعيين الخلفية: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                    } finally {
-                                        isApplying = false
+                                        Toast.makeText(
+                                            context,
+                                            "تم تعيين الخلفية للشاشة الرئيسية وشاشة القفل",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(context, "تعذر تحميل صورة الخلفية", Toast.LENGTH_SHORT).show()
                                     }
+                                } catch (error: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "فشل تعيين الخلفية: ${error.localizedMessage}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } finally {
+                                    isApplying = false
                                 }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp)
-                                .testTag("set_wallpaper_button"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            if (isApplying) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Icon(imageVector = Icons.Default.Wallpaper, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("تعيين كخلفية للشاشة", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
                             }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(54.dp).testTag("set_wallpaper_button"),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        if (isApplying) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Wallpaper, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("تعيين كخلفية للشاشة", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
